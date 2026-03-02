@@ -89,7 +89,7 @@
     // LeanCloud 配置 (请填入你的真实信息)
     // ==========================================
     const BMOB_SECRET_KEY = "31cbd63ad7d74fba"; 
-    const BMOB_SAFE_CODE = "6aa50fea17953494319ba6785576eb42"; 
+    const BMOB_SAFE_CODE = "7ae3451669e7c1812e192c923fd8ee4a"; 
     
     let dbReady = false;
 
@@ -1079,7 +1079,7 @@
 
         // 比对计算结果和用户输入是否一致
         if (inputCode !== calculatedCode) {
-            return { valid: false, msg: `校验码错误！根据规则，末尾应该是 ${calculatedCode}` };
+            return { valid: false, msg: `校验码错误！` };
         }
 
         return { valid: true, number: parseInt(numPart), cleanID: fullID };
