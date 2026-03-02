@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>情境认知解读练习</title>
-    <script src="https://code.bdstatic.com/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
+    <script src="https://unpkg.com/hydrogen-js-sdk/dist/Bmob-2.2.5.min.js"></script>
     <style>
         :root { --primary: #07c160; --bg: #f0f2f5; --white: #fff; --text: #333; }
         body { font-family: -apple-system, "PingFang SC", sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); min-height: 100vh; display: flex; justify-content: center; }
@@ -88,18 +88,17 @@
     // ==========================================
     // LeanCloud 配置 (请填入你的真实信息)
     // ==========================================
-    const LC_ID = "WbQHdUhnOATg9DRC0BGvZm1T-MdYXbMMI";
-    const LC_KEY = "sTa6DivCto3RM0yShf5QmGLR";
-    const LC_URL = "http://129.226.137.101"; // 你的服务器地址
-
-    // 初始化
+    const BMOB_SECRET_KEY = "31cbd63ad7d74fba"; 
+    const BMOB_SAFE_CODE = "319ba6785576eb42"; 
+    
     let dbReady = false;
-    if (LC_ID.length > 5) {
-        try {
-            AV.init({ appId: LC_ID, appKey: LC_KEY, serverURLs: LC_URL });
-            dbReady = true;
-            console.log("云数据库已连接");
-        } catch(e) { console.error("DB Error", e); }
+
+    try {
+        Bmob.initialize(BMOB_SECRET_KEY, BMOB_SAFE_CODE);
+        dbReady = true;
+        console.log("Bmob 云数据库已连接");
+    } catch(e) { 
+        console.error("DB Error", e); 
     }
 
     // ==========================================
@@ -1140,44 +1139,38 @@
 
         // 6. 云端查询逻辑
         try {
-            const query = new AV.Query(state.tableName);
-            
-            // ★★★ 修复点 1：把 id 改为 state.user.id ★★★
-            query.equalTo('userId', state.user.id);
-            
-            const record = await query.first();
+            const query = Bmob.Query(state.tableName);
+            query.equalTo("userId", "==", state.user.id);
+            const records = await query.find();
 
-            if (record) {
+            if (records.length > 0) {
                 // 老用户恢复
-                state.currentAVObject = record;
-                state.responses = record.get('data') || [];
+                const record = records[0]; // Bmob 返回的是数组
+                state.currentAVObject = record; 
+                state.responses = record.data || [];
                 state.idx = state.responses.length; 
-                state.startTime = Date.now() - (record.get('duration') * 1000);
+                state.startTime = Date.now() - ((record.duration || 0) * 1000);
                 
                 if (state.idx >= state.activeQuestions.length) {
                     alert(`您已完成第 ${state.round} 轮的所有练习！`);
-                    // 如果是第一轮完成，可以提示关闭；如果是第二轮，也可以提示
-                    // 这里简单处理为完成
                     finish();
                     return;
                 }
                 alert(`欢迎回来！第 ${state.round} 轮练习将从第 ${state.idx + 1} 题继续。`);
             } else {
                 // 新用户创建
-                const ExpClass = AV.Object.extend(state.tableName);
-                const newRecord = new ExpClass();
-                newRecord.set('name', name);
+                const insertQuery = Bmob.Query(state.tableName);
+                insertQuery.set('name', name);
+                insertQuery.set('userId', state.user.id);
+                insertQuery.set('group', state.group);
+                insertQuery.set('round', state.round); 
+                insertQuery.set('data', []);
+                insertQuery.set('finished', false);
+                insertQuery.set('duration', 0);
                 
-                // ★★★ 修复点 2：把 id 改为 state.user.id ★★★
-                newRecord.set('userId', state.user.id);
-                
-                newRecord.set('group', state.group);
-                newRecord.set('round', state.round); 
-                newRecord.set('data', []);
-                newRecord.set('finished', false);
-                newRecord.set('duration', 0);
-                
-                state.currentAVObject = await newRecord.save();
+                // 保存并记录返回的 objectId (后续更新需要用到)
+                const res = await insertQuery.save();
+                state.currentAVObject = { objectId: res.objectId };
                 state.startTime = Date.now();
             }
 
@@ -1188,18 +1181,12 @@
 
         } catch (error) {
             console.error("Login Error:", error);
-            
-            // 简单判断一下 404
-            if (error.message && error.message.includes('404')) {
-                alert("连接失败 (404)。\n请检查：\n1. LeanCloud 后台是否创建了 ExpData_R1 和 ExpData_R2 表。\n2. Nginx 反代配置是否正确。");
-            } else {
-                alert(`启动失败：${error.message}`);
-            }
-        
+            alert(`启动失败：请检查网络或联系研究者。`);
             btn.disabled = false;
             btn.innerText = "开始 / 继续练习";
         }
     }
+
 
     // 2. 渲染题目
     function renderQ() {
@@ -1294,16 +1281,19 @@
 
     // 4. 云同步
     async function syncToCloud(isFinal = false) {
-        if (!state.currentAVObject) return;
+        if (!state.currentAVObject || !state.currentAVObject.objectId) return;
         const statusEl = document.getElementById('save-status');
         statusEl.style.display = 'block';
 
         try {
-            state.currentAVObject.set('data', state.responses);
-            state.currentAVObject.set('duration', Math.floor((Date.now() - state.startTime)/1000));
-            if (isFinal) state.currentAVObject.set('finished', true);
+            const updateQuery = Bmob.Query(state.tableName);
+            // Bmob 更新数据必须指定具体的 objectId
+            updateQuery.set('id', state.currentAVObject.objectId);
+            updateQuery.set('data', state.responses);
+            updateQuery.set('duration', Math.floor((Date.now() - state.startTime)/1000));
+            if (isFinal) updateQuery.set('finished', true);
 
-            await state.currentAVObject.save();
+            await updateQuery.save();
             setTimeout(() => { statusEl.style.display = 'none'; }, 500);
         } catch (error) {
             console.error("同步失败", error);
