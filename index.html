@@ -1158,7 +1158,7 @@
                 
                 if (state.idx >= state.activeQuestions.length) {
                     alert(`您已完成第 ${state.round} 轮的所有练习！`);
-                    showEndPage();
+                    finish();
                     return;
                 }
                 alert(`欢迎回来！第 ${state.round} 轮练习将从第 ${state.idx + 1} 题继续。`);
@@ -1195,7 +1195,7 @@
 
     // 2. 渲染题目
     function renderQ() {
-        if (state.idx >= state.activeQuestions.length) return showEndPage();
+        if (state.idx >= state.activeQuestions.length) return finish();
 
         const q = state.activeQuestions[state.idx];
         state.questionStartTime = Date.now();
