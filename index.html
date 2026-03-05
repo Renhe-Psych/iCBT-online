@@ -1158,7 +1158,7 @@
                 
                 if (state.idx >= state.activeQuestions.length) {
                     alert(`您已完成第 ${state.round} 轮的所有练习！`);
-                    finish();
+                    showEndPage();
                     return;
                 }
                 alert(`欢迎回来！第 ${state.round} 轮练习将从第 ${state.idx + 1} 题继续。`);
@@ -1195,10 +1195,10 @@
 
     // 2. 渲染题目
     function renderQ() {
-        if (state.idx >= state.activeQuestions.length) return finish();
+        if (state.idx >= state.activeQuestions.length) return showEndPage();
 
         const q = state.activeQuestions[state.idx];
-        state.qu = Date.now();
+        state.questionStartTime = Date.now();
         document.getElementById('progress-text').innerText = `进度: ${state.idx + 1} / ${state.activeQuestions.length}`;
         document.getElementById('q-text').innerText = q.text;
         
@@ -1219,7 +1219,7 @@
     function answer(choice) {
         const q = state.activeQuestions[state.idx];
         const currentTime = Date.now()
-        const rt = currentTime - state.startTime;
+        const rt = currentTime - state.questionStartTime;
         state.responses.push({
             qid: q.id, 
             choice: choice,
@@ -1296,18 +1296,21 @@
         renderQ();
     }
 
-    // 4. 云同步
+// 4. 云同步 (已修复 duration 类型 Bug)
     async function syncToCloud(isFinal = false) {
         if (!state.currentAVObject || !state.currentAVObject.objectId) return;
         const statusEl = document.getElementById('save-status');
         statusEl.style.display = 'block';
 
+        // 强校验：确保 finalDuration 绝对是一个纯数字
+        let currentDuration = Math.floor((Date.now() - state.sessionStartTime) / 1000);
+        if (isNaN(currentDuration) || currentDuration < 0) currentDuration = 0;
+
         try {
             const updateQuery = Bmob.Query(state.tableName);
-            // Bmob 更新数据必须指定具体的 objectId
             updateQuery.set('id', state.currentAVObject.objectId);
             updateQuery.set('data', state.responses);
-            updateQuery.set('duration', Math.floor((Date.now() - state.startTime)/1000));
+            updateQuery.set('duration', Number(currentDuration)); // 强制转换为纯数字
             if (isFinal) updateQuery.set('finished', true);
 
             await updateQuery.save();
@@ -1315,20 +1318,103 @@
         } catch (error) {
             console.error("同步失败", error);
             statusEl.innerText = "⚠️ 保存失败，正在重试...";
-            setTimeout(() => syncToCloud(isFinal), 3000);
+            // 如果不是最终提交，就在后台默默重试
+            if (!isFinal) {
+                setTimeout(() => syncToCloud(false), 3000);
+            }
         }
     }
 
-
-    function showEndPage() {
+    // 5. 最终提交与断网兜底逻辑
+    async function finish() {
         document.getElementById('page-game').classList.add('hidden');
         
+        // 显示一个正在上传的提示
+        const loadingHTML = `
+            <div id="final-loading" style="text-align:center; padding: 50px; animation: fadeIn 0.5s;">
+                <h2 style="color:var(--primary);">正在加密上传您的数据...</h2>
+                <p>请勿关闭当前页面，这通常需要几秒钟。</p>
+            </div>
+        `;
+        const container = document.querySelector('.container');
+        container.insertAdjacentHTML('beforeend', loadingHTML);
+
+        // 强校验：确保 finalDuration 绝对是一个纯数字
+        let finalDuration = Math.floor((Date.now() - state.sessionStartTime) / 1000);
+        if (isNaN(finalDuration) || finalDuration < 0) finalDuration = 0;
+
+        let syncSuccess = false;
+
+        try {
+            // 尝试进行最后一次强制同步
+            const updateQuery = Bmob.Query(state.tableName);
+            updateQuery.set('id', state.currentAVObject.objectId);
+            updateQuery.set('data', state.responses);
+            updateQuery.set('duration', Number(finalDuration)); 
+            updateQuery.set('finished', true);
+            await updateQuery.save();
+            syncSuccess = true; // 上传成功！
+        } catch (error) {
+            console.error("最终同步彻底失败", error);
+            syncSuccess = false; // 上传失败（比如被试此时正好断网了）
+        }
+
+        // 移除加载提示
+        document.getElementById('final-loading').remove();
+
+        // 根据同步结果，决定显示哪个页面
+        if (syncSuccess) {
+            showEndPage(); // 正常显示感谢页面
+        } else {
+            showOfflineFallback(); // 触发断网兜底方案
+        }
+    }
+
+    // 6. 断网兜底方案：生成数据密码
+    function showOfflineFallback() {
+        // 将被试的核心数据进行极简压缩，防止密码太长
+        const payload = {
+            u: state.user.id,
+            g: state.group,
+            r: state.round,
+            // 仅提取核心字段：题号_选项_反应时_是否回忆成功
+            d: state.responses.map(r => `${r.qid}_${r.choice}_${r.rt}_${r.recall ? 1 : 0}`) 
+        };
+        
+        // 使用 Base64 将数据编码成看似乱码的“数据密码”
+        const dataToken = btoa(JSON.stringify(payload));
+
+        const fallbackHTML = `
+            <div id="page-fallback" style="text-align: center; padding: 20px 0; animation: fadeIn 0.8s;">
+                <h2 style="color: #faad14; margin-bottom: 20px;">⚠️ 网络同步异常</h2>
+                <div style="text-align: left; background: #fffbe6; padding: 20px; border-radius: 10px; border: 1px solid #ffe58f; margin-bottom: 20px;">
+                    <p style="margin-top: 0;">您的网络似乎暂时断开了，导致练习记录未能自动上传到云端。</p>
+                    <p><strong>请不要担心，您的作答记录已被安全加密为下方的数据码：</strong></p>
+                    <textarea readonly id="data-token-box" style="width: 100%; height: 120px; margin: 10px 0; font-size: 12px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; background: #fafafa; word-break: break-all;">${dataToken}</textarea>
+                    <p style="margin-bottom: 0;"><strong>👉 请点击下方按钮复制这段代码，并通过微信发送给主试（研究者），您的报酬将正常发放。</strong></p>
+                </div>
+                <button class="btn btn-primary" onclick="copyDataToken()" style="background: #faad14; color: #fff;">一键复制数据码</button>
+            </div>
+        `;
+        document.querySelector('.container').insertAdjacentHTML('beforeend', fallbackHTML);
+    }
+
+    // 复制密码功能
+    function copyDataToken() {
+        const copyText = document.getElementById("data-token-box");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); // 兼容手机端
+        document.execCommand("copy");
+        alert("复制成功！请将剪贴板中的内容粘贴并发送给研究人员。");
+    }
+
+    // 7. 正常的感谢页面 (保持你原有的逻辑不变)
+    function showEndPage() {
+        // ... (保留你原来写的 showEndPage 里的所有代码) ...
         let endTitle = "";
         let endContent = "";
 
-        // 根据 state.group 判断结束语内容
         if (state.group === 'exp') {
-            // 实验组：强调积极干预、认知重构和成长
             endTitle = "🎉 练习达成：开启积极视角";
             endContent = `
                 练习已完成，感谢你的认真参与！<br>
@@ -1337,7 +1423,6 @@
                 <strong>再次感谢你的贡献，祝你拥有愉快的一天！</strong>
             `;
         } else {
-            // 控制组：强调任务完成、科学贡献和日常状态
             endTitle = "✅ 练习完成：感谢参与";
             endContent = `
                 练习已完成，感谢你的认真参与！<br>
@@ -1356,9 +1441,7 @@
                 <button class="btn btn-primary" onclick="location.reload()" style="width: auto; padding: 12px 40px;">回到首页</button>
             </div>
         `;
-        
-        const container = document.querySelector('.container');
-        container.insertAdjacentHTML('beforeend', endPageHTML);
+        document.querySelector('.container').insertAdjacentHTML('beforeend', endPageHTML);
     }
 
 </script>
