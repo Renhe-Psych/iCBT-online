@@ -42,6 +42,10 @@
             <p style="margin-bottom: 15px;">
                 本练习约需 <strong>30–40分钟</strong>，建议你 <strong>放慢速度、仔细阅读、想象自己身处其中</strong>，再做出选择。
             </p>
+            <p style="margin-bottom: 15px;">
+                你的选择将用于科学研究，所有数据将<strong>匿名处理</strong>，仅用于学术分析。
+            </p>
+
             <p>
                 准备好后，请选择当前进行的轮次，并点击 <strong>“开始练习”</strong>。
             </p>
@@ -1193,7 +1197,7 @@
         if (state.idx >= state.activeQuestions.length) return finish();
 
         const q = state.activeQuestions[state.idx];
-        
+        state.startTime = Date.now();
         document.getElementById('progress-text').innerText = `进度: ${state.idx + 1} / ${state.activeQuestions.length}`;
         document.getElementById('q-text').innerText = q.text;
         
@@ -1213,13 +1217,25 @@
     // 3. 答题逻辑
     function answer(choice) {
         const q = state.activeQuestions[state.idx];
-        
+        const currentTime = Date.now()
+        const rt = currentTime - state.startTime;
         state.responses.push({
             qid: q.id, 
             choice: choice,
-            ts: Date.now(),
+            ts: currentTime,
+            rt: rt,
             recall: null 
         });
+
+        // 2. 反应过快监测逻辑
+        if (state.responses.length >= 3) {
+            // 获取最后 3 条记录的反应时
+            const last3RT = state.responses.slice(-3).map(r => r.rt);
+            // 如果连续 3 题都小于 800 毫秒
+            if (last3RT.every(time => time < 800)) {
+                alert("我们注意到您最近的作答速度非常快。\n\n为确保练习效果，请您放慢速度，仔细阅读情境并想象自己身处其中，然后再做出选择。这对本次练习非常重要。");
+            }
+        }
 
         document.getElementById('btnA').disabled = true;
         document.getElementById('btnB').disabled = true;
@@ -1302,18 +1318,48 @@
         }
     }
 
-    function finish() {
-        syncToCloud(true).then(() => {
-            document.getElementById('page-game').innerHTML = `
-                <div style="text-align:center; padding-top:50px;">
-                    <h1 style="color:#07c160; font-size:60px;">✅</h1>
-                    <h2>本轮练习结束</h2>
-                    <p>数据已保存到 ${state.tableName}。</p>
-                    <p>感谢参与！请关闭页面。</p>
-                </div>
+
+    function showEndPage() {
+        document.getElementById('page-game').classList.add('hidden');
+        
+        let endTitle = "";
+        let endContent = "";
+
+        // 根据 state.group 判断结束语内容
+        if (state.group === 'exp') {
+            // 实验组：强调积极干预、认知重构和成长
+            endTitle = "🎉 练习达成：开启积极视角";
+            endContent = `
+                练习已完成，感谢你的认真参与！<br>
+                在刚才的练习中，你尝试了从不同角度理解情境。希望你感受到，选择积极的信念可以带来更轻松的心态。<br>
+                生活中的情境常常有多种解读方式，试着多给自己一些积极肯定的空间。<br>
+                <strong>再次感谢你的贡献，祝你拥有愉快的一天！</strong>
             `;
-        });
+        } else {
+            // 控制组：强调任务完成、科学贡献和日常状态
+            endTitle = "✅ 练习完成：感谢参与";
+            endContent = `
+                练习已完成，感谢你的认真参与！<br>
+                你已完成了所有情境选择，你的反馈对我们非常重要。<br>
+                本研究旨在探索信念与解释方式之间的关系，你的参与为科学进步贡献了宝贵数据。<br>
+                <strong>再次感谢你的时间与配合！</strong>
+            `;
+        }
+
+        const endPageHTML = `
+            <div id="page-end" style="text-align: center; padding: 20px 0; animation: fadeIn 0.8s;">
+                <h1 style="color: var(--primary); margin-bottom: 20px;">${endTitle}</h1>
+                <p style="font-size: 15px; line-height: 1.8; color: #555; margin-bottom: 30px; text-align: left; background: #f9f9f9; padding: 20px; border-radius: 10px;">
+                    ${endContent}
+                </p>
+                <button class="btn btn-primary" onclick="location.reload()" style="width: auto; padding: 12px 40px;">回到首页</button>
+            </div>
+        `;
+        
+        const container = document.querySelector('.container');
+        container.insertAdjacentHTML('beforeend', endPageHTML);
     }
+
 </script>
 </body>
 </html>
