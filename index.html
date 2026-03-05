@@ -1037,7 +1037,8 @@
         tableName: "", 
         idx: 0,
         responses: [],
-        startTime: 0,
+        sessionStartTime: 0, // 记录整个练习的开始时间
+        questionStartTime: 0, // 记录每一道题的展示时间
         currentAVObject: null,
         activeQuestions: [] 
     };
@@ -1153,7 +1154,7 @@
                 state.currentAVObject = record; 
                 state.responses = record.data || [];
                 state.idx = state.responses.length; 
-                state.startTime = Date.now() - ((record.duration || 0) * 1000);
+                state.sessionStartTime = Date.now() - ((record.duration || 0) * 1000);
                 
                 if (state.idx >= state.activeQuestions.length) {
                     alert(`您已完成第 ${state.round} 轮的所有练习！`);
@@ -1175,7 +1176,7 @@
                 // 保存并记录返回的 objectId (后续更新需要用到)
                 const res = await insertQuery.save();
                 state.currentAVObject = { objectId: res.objectId };
-                state.startTime = Date.now();
+                state.sessionStartTime = Date.now();
             }
 
             // 切换界面
@@ -1197,7 +1198,7 @@
         if (state.idx >= state.activeQuestions.length) return finish();
 
         const q = state.activeQuestions[state.idx];
-        state.startTime = Date.now();
+        state.qu = Date.now();
         document.getElementById('progress-text').innerText = `进度: ${state.idx + 1} / ${state.activeQuestions.length}`;
         document.getElementById('q-text').innerText = q.text;
         
