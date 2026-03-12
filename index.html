@@ -1247,21 +1247,27 @@
 
     // 3. 答题逻辑
     function answer(choice) {
-        clearIdleTimer(); // [新增] 答题瞬间，暂停挂机警告
+        clearIdleTimer(); // 答题瞬间，暂停挂机警告
 
         const q = state.activeQuestions[state.idx];
         const currentTime = Date.now();
         const rt = currentTime - state.questionStartTime;
+        
+        // 获取被试选择的具体选项文字
+        const selectedText = (choice === 'A') ? q.optionA : q.optionB;
+
         state.responses.push({
             qid: q.id, 
-            choice: choice,
+            qText: q.text,              // [新增] 记录题目完整内容
+            choice: choice,             // 记录选了 A 还是 B
+            selectedText: selectedText, // [新增] 记录被试选择的那个选项的具体文字
             ts: currentTime,
             rt: rt,
             recall: null 
         });
 
         // =========================================
-        // [修改] 单题测速逻辑 (少于0.8秒直接提示，不再等3题)
+        // 单题测速逻辑 (少于0.8秒直接提示)
         // =========================================
         if (rt < 800) {
             alert("⚠️ 我们注意到您这道题的作答速度非常快（少于 0.8 秒）。\n\n为确保练习效果，请您放慢速度，仔细阅读情境并想象自己身处其中，然后再做出选择。");
