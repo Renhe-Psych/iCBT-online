@@ -296,7 +296,7 @@
         "optionB": "我比别人完成的更差。",
         "positive": "A",
         "fbPos": "很棒，你认为你能比别人更好的完成任务，你选择了一个积极的信念，这对你有好处。继续保持。",
-        "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你在团队分工中完成的和其他人一样的经历。继续加油。"
+        "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你在重要团队分工任务中完成得很好的经历。继续加油。"
     },
     {
         "id": 22,
@@ -305,7 +305,7 @@
         "optionB": "我的表现不如别人。",
         "positive": "A",
         "fbPos": "很棒，你认为你能表现得比别人优秀，你选择了一个积极的信念，这对你有好处。继续保持。",
-        "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你和别人一样优秀的经历。继续加油。"
+        "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你在过往比赛中表现优秀的经历。继续加油。"
     },
     {
         "id": 23,
@@ -472,8 +472,8 @@
     {
         "id": 41,
         "text": "当我跟同事说，我需要进行艰难的谈判，他说：",
-        "optionA": "“相信你能处理好，有需要再找我。”",
-        "optionB": "“你不够强硬，换个人去谈判吧。”",
+        "optionA": "相信你能处理好，有需要再找我。",
+        "optionB": "你不够强硬，换个人去谈判吧。",
         "positive": "A",
         "fbPos": "很棒，你认为你的同事信任你，你选择了一个积极的信念，这对你有好处。继续保持。",
         "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你在工作谈判中取得成功的经历。继续加油。"
@@ -481,8 +481,8 @@
     {
         "id": 42,
         "text": "当别人对我提出一个不合理的额外要求，一位朋友对我说：",
-        "optionA": "“我相信你会做出合适的处理。”",
-        "optionB": "“你太好被拿捏了，你总是不会拒绝别人。“",
+        "optionA": "我相信你会做出合适的处理。",
+        "optionB": "你太好被拿捏了，你总是不会拒绝别人。",
         "positive": "A",
         "fbPos": "很棒，你认为你的朋友相信你，你选择了一个积极的信念，这对你有好处。继续保持。",
         "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你明确维护自己权益的经历。继续加油。"
@@ -806,7 +806,7 @@
         "id": 78,
         "text": "在联谊会中，有陌生人主动来找我交谈。我认为：",
         "optionA": "别人觉得我有吸引力，主动来交谈。",
-        "optionB": "别人觉得我没有吸引力，无人来找我交谈。",
+        "optionB": "他可能只是出于礼貌或者随意找人凑数，并不是觉得我有吸引力。",
         "positive": "A",
         "fbPos": "很棒，你认为别人觉得你有吸引力，你选择了一个积极的信念，这对你有好处。继续保持。",
         "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆你在聚会中与别人的积极互动。继续努力。"
@@ -859,8 +859,8 @@
     {
         "id": 84,
         "text": "我主动提出要承担一项任务，负责人没有说话：",
-        "optionA": "负责人可能想自己完成。",
-        "optionB": "负责人婉拒了。",
+        "optionA": "负责人想安排给我更重要的任务。",
+        "optionB": "负责人认为我能力不足。",
         "positive": "A",
         "fbPos": "很棒，你认为对方只是想独立完成，你选择了一个积极的信念，这对你有好处。继续保持。",
         "fbNeg": "很遗憾，你选择了一个消极的信念，这对你不利，请回忆负责人对你的积极评价。继续努力。"
@@ -1285,7 +1285,7 @@
         document.getElementById('next-box').classList.add('hidden');
     }
 
-    // 3. 答题逻辑
+    // 3. 答题逻辑 (修复版：注意力题不走核心信念二次确认)
     function answer(choice) {
         clearIdleTimer(); 
 
@@ -1302,8 +1302,8 @@
             selectedText: selectedText, 
             ts: currentTime,
             rt: rt,
-            recall: null, // 留给消极选项的回忆确认
-            intuitive: null // 新增：留给积极选项的直觉确认
+            recall: null,
+            intuitive: null
         });
 
         if (rt < 800) {
@@ -1323,37 +1323,40 @@
 
         const isCorrect = (choice === q.positive);
         const targetBtn = document.getElementById('btn' + choice);
-        
+        const isAttnCheck = String(q.id).startsWith("attn_");
+
         if (isCorrect) {
             targetBtn.style.background = "#f0f9eb";
             targetBtn.style.borderColor = "#07c160";
-            // 积极选项的确认：增加一步二选一，平衡操作代价
-            showFeedback(q.fbPos + "<br><strong>这符合你平时的第一直觉吗？</strong>", false);
+        } else {
+            targetBtn.style.background = "#fffbe6";
+            targetBtn.style.borderColor = "#faad14";
+        }
+
+        if (isAttnCheck) {
+            showFeedback(isCorrect ? q.fbPos : q.fbNeg, !isCorrect);
+            showNextBtn();
+            return;
+        }
+
+        if (isCorrect) {
+            showFeedback(q.fbPos + "<br><strong>这个积极的解释对你来说容易接受吗？</strong>", false);
             document.getElementById('next-box').innerHTML = `
                 <div style="display:flex; gap:10px; margin-top:10px;">
-                    <button class="btn btn-primary" style="margin:0" onclick="handlePositiveConfirm(true)">是的</button>
-                    <button class="btn btn-outline" style="margin:0" onclick="handlePositiveConfirm(false)">不太符合</button>
+                    <button class="btn btn-primary" style="margin:0" onclick="handlePositiveConfirm(true)">容易</button>
+                    <button class="btn btn-outline" style="margin:0" onclick="handlePositiveConfirm(false)">有些困难</button>
                 </div>
             `;
             document.getElementById('next-box').classList.remove('hidden');
         } else {
-            targetBtn.style.background = "#fffbe6";
-            targetBtn.style.borderColor = "#faad14";
-            
-            if (String(q.id).startsWith("attn_")) {
-                showFeedback(q.fbNeg, true);
-                showNextBtn();
-            } else {
-                // 消极选项的确认
-                showFeedback(q.fbNeg + "<br><strong>请问是否回忆成功？</strong>", true);
-                document.getElementById('next-box').innerHTML = `
-                    <div style="display:flex; gap:10px; margin-top:10px;">
-                        <button class="btn btn-primary" style="margin:0" onclick="handleRecall(true)">是的</button>
-                        <button class="btn btn-outline" style="margin:0" onclick="handleRecall(false)">没有</button>
-                    </div>
-                `;
-                document.getElementById('next-box').classList.remove('hidden');
-            }
+            showFeedback(q.fbNeg + "<br><strong>请问是否回忆成功？</strong>", true);
+            document.getElementById('next-box').innerHTML = `
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <button class="btn btn-primary" style="margin:0" onclick="handleRecall(true)">是的</button>
+                    <button class="btn btn-outline" style="margin:0" onclick="handleRecall(false)">没有</button>
+                </div>
+            `;
+            document.getElementById('next-box').classList.remove('hidden');
         }
     }
 
@@ -1365,7 +1368,7 @@
         next();
     }
 
-    // 处理积极选项的直觉确认
+    // 处理积极选项的「容易接受」确认（平衡反应代价）
     function handlePositiveConfirm(isIntuitive) {
         const lastIndex = state.responses.length - 1;
         state.responses[lastIndex].intuitive = isIntuitive;
